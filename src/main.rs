@@ -818,7 +818,7 @@ async fn verify_password(password: String, hashed_password: String) -> bool {
 }
 
 async fn logout(
-    Path(user_id): Path<i32>,
+    Path(user_id): Path<i64>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     let result = state
@@ -848,7 +848,7 @@ async fn logout(
 }
 
 async fn audit_user(
-    Path(user_id): Path<i32>,
+    Path(user_id): Path<i64>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     let result = state
