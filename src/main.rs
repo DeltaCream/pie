@@ -141,7 +141,7 @@ async fn main() {
     dotenv().ok();
     let database_url =
         // env::var("POSTGRES_URL_NON_POOLING").expect("DB_URL env var must be set (from Supabase)");
-        env::var("DB_URL").expect("DB_URL env var must be set");
+        env::var("DATABASE_URL").expect("DATABASE_URL env var must be set");
     // println!("Database URL: {}", database_url);
 
     let pool = PgPool::connect(&database_url)
@@ -521,7 +521,7 @@ async fn login_by_username(
 
     let session_id = Uuid::new_v4().to_string(); //different from the original implementation of 16-length byte random string
 
-    update_session(
+    upsert_session(
         user_id,
         Some(session_id.clone()),
         Some(jwt_token.clone()),
@@ -622,7 +622,7 @@ async fn login_by_email(
 
     let session_id = Uuid::new_v4().to_string(); //different from the original implementation of 16-length byte random string
 
-    update_session(
+    upsert_session(
         user_id,
         Some(session_id.clone()),
         Some(jwt_token.clone()),
@@ -770,7 +770,7 @@ async fn insert_audit_log(
     Ok(())
 }
 
-async fn update_session(
+async fn upsert_session(
     user_id: i64,
     session_id: Option<String>,
     jwt_token: Option<String>,
@@ -780,11 +780,24 @@ async fn update_session(
         .db
         .execute(
             sqlx::query(
-                "UPDATE schema.sessions SET session_id = $1, jwt_token = $2 WHERE user_id = $3",
+                //insert session for a given user if it does not exist, otherwise update it with the given session id and jwt token
+                r#"
+                INSERT INTO schema.sessions (user_id, session_id, jwt_token) VALUES ($1, $2, $3)
+                ON CONFLICT (user_id) DO UPDATE SET session_id = $2, jwt_token = $3
+                RETURNING id, user_id, session_id, jwt_token
+                "#,
             )
+            .bind(user_id)
             .bind(session_id)
-            .bind(jwt_token)
-            .bind(user_id),
+            .bind(jwt_token),
+            // Use code below for statically-checked (compile time) queries
+            // sqlx::query!(
+            //     r#"
+            //     INSERT INTO schema.sessions (user_id, session_id, jwt_token) VALUES ($1, $2, $3)
+            //     ON CONFLICT (user_id) DO UPDATE SET session_id = $2, jwt_token = $3
+            //     RETURNING id, user_id, session_id, jwt_token
+            //     "#, user_id, session_id, jwt_token
+            // )
         )
         .await
         .map_err(|e| format!("Failed to update session: {}", e))?;
