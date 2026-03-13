@@ -1,6 +1,6 @@
 # Making Pie
 
-I wanted to name this project originally as "Pi", but I thought that  it would make me sound too much of a nerd so I decided to name it "Pie" instead.
+I wanted to name this project originally as "Pi", but I thought that it would make me sound too much of a nerd so I decided to name it "Pie" instead.
 
 Here's the process of making Pie, currently we are at the beginning phase.
 1. For the server, I use axum, for its ease of use, yet surprising amount of flexibility and community support and adoption.
@@ -20,7 +20,7 @@ Turns out, they are quite different from what I remembered, and cookies are used
 
 How does JWT fit in the picture? Well, based on [GeeksForGeeks](https://www.geeksforgeeks.org/javascript/difference-between-session-and-cookies/), JWTs are used for authentication and authorization, and are stored on the client side, but are signed by the server, so that the client can verify that the token is valid and has not been tampered with.
 
-In addition, I think I want to implement JWT as a bearer token for use in API transactions (updating, creating, and deleting resources) which is pretty neat, as I will be uisng it in either HttpOnly, Secure, or SameSite, which has benefits against JavaScript access (HTTPOnly), for security (Secure, via HTTPS), and cross-site scripting and forgery attacks (SameSite).
+In addition, I think I want to implement JWT as a bearer token for use in API transactions (updating, creating, and deleting resources) which is pretty neat, as I will be using it in either HttpOnly, Secure, or SameSite, which has benefits against JavaScript access (HTTPOnly), for security (Secure, via HTTPS), and cross-site scripting and forgery attacks (SameSite).
 
 After some research, I also encountered using Redis as a cache for JWT tokens, which can improve performance and scalability by reducing the load on the server and allowing for faster token validation. Additionally, Redis can be used as a distributed cache for storing frequently accessed data, which can further improve performance and scalability. That is some crazy amount of optimization just for "doing things right" with some good old cookies and sessions. But over-optimizing is my thing and we will figure things out along the way.
 
