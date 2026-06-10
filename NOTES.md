@@ -27,3 +27,36 @@ After some research, I also encountered using Redis as a cache for JWT tokens, w
 So for now, what I intend to do is to implement Redis (or more preferably, Valkey), to use it as a distributed cache session store. However, I will also implement a hybrid session token session that intends to use a short-lived access token (in the form of a JWT) and a long-lived refresh token that is stored in the server or as an HttpOnly cookie, in order to be able to revoke access, while still being relatively stateless in some aspects.
 
 ## Server and Database Information Disparity: What Needs To Be Shown And What Doesn't
+
+A big problem that I've seen designing the backend is how things are represented in the server, through structs in Rust, and tables/views in Postgres. They are significantly different, because the differences in representation are due to how their position and purpose differs, though a lot of their data overlap.
+For example, returning Postgres data usually involves raw data straight from the database, but Rust structs can be subject to intermediate data processing, which can lead to some of that raw data not being present in the final serialized outputs, or being transformed into a form unrecognizable from how it looks in the database. But most importantly aside from that conversation is that Rust structs must account for serialization and deserialization.
+
+This is especially the case for inputs. Inputs deserialized as Rust structs may contain fields that never make it to the Postgres querying process, just as likely as it is that certain values returned from the querying process never make it out of the serialized output. 
+
+## The UX Gift of Search Engines
+
+Search engines aren't really a big thing in this application, and might be overkill, but it will serve as a great user experience to have a flashy-fast search engine that can return what users need faster than they can blink.
+
+For this, I have encountered Meilisearch, which can be self-hosted. I have heard of other alternatives, like Sonic and most especially Algolia, but Algolia is hosted, and cannot be something that you use on your own, while Sonic is a bit minimal for my needs.
+
+## Dual Core Servers
+
+One of the defining features that I want to tackle when building this project is that there are two variants - one for Axum, and another for Actix Web. Both are powerful, both are popular. Building both in one project teaches me multiple things:
+
+1. I can learn how to manage multiple projects in a single Git repository,
+2. I can learn how to share common resources that these multiple projects use, and
+3. I can learn both frameworks and increase my expertise on both, as well as increase the flexibility of my thinking between the two web frameworks.
+
+How it works is that when you clone this repository, you can choose to build either of the two and have it running. This will eventually prove to be a big problem for me, but that's a problem I'm willing to tackle because I expect this project to be small to medium-sized only.
+
+## Environs
+
+You shouldn't commit your environment files (.env) and you should include it instead to the .gitignore file.
+
+However, on Linux, there is a neat trick that we can use.
+
+You can symlink the file so that you can have an .env file in this project, but you can have the original file be somewhere else.
+
+In addition to adding the .env to the .gitignore file, this makes for a relatively distant, yet accessible .env that is secured by symlinking and prevention of committing to version history.
+
+There might be some incompatibilities with this approach, but this section will be updated later on for when I encounter (and solve) those issues.
