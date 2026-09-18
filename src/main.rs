@@ -17,8 +17,9 @@ use pie::{
     },
     response::not_found,
 };
+use reqwest::Client;
 use sqlx::{Executor, PgPool, Row};
-use std::{env, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, env, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_governor::{GovernorLayer, governor::GovernorConfig};
@@ -37,6 +38,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 struct AppState {
     db: Arc<PgPool>,
+    client: Client,
 }
 
 async fn hello_world() -> &'static str {
@@ -71,7 +73,10 @@ async fn main() {
         .await
         .expect("Failed to connect to database");
 
-    let state = AppState { db: Arc::new(pool) };
+    let state = AppState {
+        db: Arc::new(pool),
+        client: reqwest::Client::new(),
+    };
 
     // Services
     let trace_layer = TraceLayer::new_for_http()
@@ -157,7 +162,9 @@ async fn build_app() -> axum::Router<AppState> {
     let router = Router::new()
         .route("/", get(hello_world))
         .nest("/api/user", registration_route)
-        .nest("/user", login_route);
+        .nest("/user", login_route)
+        .route("/weather", post(query_weather))
+        .route("/health", todo!("/health route not yet implemented"));
 
     router.into()
 }
@@ -798,4 +805,38 @@ async fn audit_user(
     }
 
     Ok((StatusCode::OK, "User audited successfully"))
+}
+
+async fn query_weather(
+    State(state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<impl IntoResponse, ErrorResponse> {
+    let mut base_url = String::from(
+        "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/",
+    );
+    base_url.push_str(&payload["location"].to_string());
+    let api_key =
+        env::var("VISUAL_CROSSING_API_KEY").expect("No Visual Crossing API Key provided.");
+    let mut map = HashMap::new();
+    map.insert("key", api_key);
+    let body = state
+        .client
+        .post(base_url)
+        .json(&map)
+        .send()
+        .await
+        .expect("Weather API Response could not be retrieved.");
+
+    match body.error_for_status() {
+        Ok(res) => Ok((
+            StatusCode::OK,
+            res.text()
+                .await
+                .expect("Weather API Response could not be parsed."),
+        )),
+        Err(_err) => Err(ErrorResponse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Weather Request Encountered An Error".into(),
+        )),
+    }
 }
