@@ -17,7 +17,7 @@ use pie::{
     },
     response::not_found,
 };
-use reqwest::Client;
+use redis::TypedCommands;
 use sqlx::{Executor, PgPool, Row};
 use std::{collections::HashMap, env, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{net::TcpListener, signal};
@@ -38,7 +38,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 struct AppState {
     db: Arc<PgPool>,
-    client: Client,
+    http_client: reqwest::Client,
+    redis_client: redis::Client,
 }
 
 async fn hello_world() -> &'static str {
@@ -68,6 +69,8 @@ async fn main() {
         // env::var("POSTGRES_URL_NON_POOLING").expect("DB_URL env var must be set (from Supabase)");
         env::var("DATABASE_URL").expect("DATABASE_URL env var must be set");
     // println!("Database URL: {}", database_url);
+    let redis_url =
+        env::var("REDIS_CONNECTION_STRING").expect("REIDS_CONNECTION_STRING env var must be set");
 
     let pool = PgPool::connect(&database_url)
         .await
@@ -75,8 +78,14 @@ async fn main() {
 
     let state = AppState {
         db: Arc::new(pool),
-        client: reqwest::Client::new(),
+        http_client: reqwest::Client::new(),
+        redis_client: redis::Client::open(redis_url).expect("Could not connect to Valkey client."),
     };
+
+    tracing::info!(
+        "Connected to Valkey on {}",
+        state.redis_client.get_connection_info().addr()
+    );
 
     // Services
     let trace_layer = TraceLayer::new_for_http()
@@ -163,8 +172,8 @@ async fn build_app() -> axum::Router<AppState> {
         .route("/", get(hello_world))
         .nest("/api/user", registration_route)
         .nest("/user", login_route)
-        .route("/weather", post(query_weather))
-        .route("/health", todo!("/health route not yet implemented"));
+        .route("/weather", post(query_weather));
+    // .route("/health", todo!("/health route not yet implemented"));
 
     router.into()
 }
@@ -811,32 +820,104 @@ async fn query_weather(
     State(state): State<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
+    // Connect to Valkey
+    let mut redis_conn = state.redis_client.get_connection().map_err(|e| {
+        ErrorResponse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to connect to Valkey: {}", e),
+        )
+    })?;
+
+    let location = payload
+        .get("location")
+        .ok_or_else(|| {
+            ErrorResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("No Visual Crossing API Key provided."),
+            )
+        })?
+        .to_string();
+
+    // Since I'm accessing a Valkey cache, *always* prefix all keys with cache
+    let cache_key = format!("cache:weather:{location}");
+
+    // Check Valkey if the cache for the given query exists
+    let cache = match redis_conn.get(&cache_key) {
+        Ok(data) => {
+            tracing::info!("Successfully retrieved Valkey cache for request.");
+            data
+        }
+        Err(e) => {
+            tracing::error!(error = ?e, "Failed to retrieve Valkey cache for request. Retrieving via 3rd Party Weather API.");
+            None
+        }
+    };
+
+    // Return early with the cached result if it is found, else log it and proceed with the 3rd Party API request
+    match cache {
+        Some(res) => return Ok((StatusCode::OK, res)),
+        None => {
+            tracing::info!(
+                "No cache found in Valkey for request. Retrieving data via 3rd Party Weather API."
+            )
+        }
+    }
+
+    // Connect to VisualCrossing for 3rd-party Weather API
     let mut base_url = String::from(
         "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/",
     );
     base_url.push_str(&payload["location"].to_string());
-    let api_key =
-        env::var("VISUAL_CROSSING_API_KEY").expect("No Visual Crossing API Key provided.");
+    let api_key = env::var("VISUAL_CROSSING_API_KEY").map_err(|_| {
+        ErrorResponse(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("No Visual Crossing API Key provided."),
+        )
+    })?;
+
+    // Create a HashMap for POST JSON body
     let mut map = HashMap::new();
     map.insert("key", api_key);
-    let body = state
-        .client
+    let response = state
+        .http_client
         .post(base_url)
         .json(&map)
         .send()
         .await
-        .expect("Weather API Response could not be retrieved.");
+        .map_err(|_| {
+            ErrorResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Weather API Response could not be retrieved."),
+            )
+        })?;
 
-    match body.error_for_status() {
-        Ok(res) => Ok((
-            StatusCode::OK,
-            res.text()
-                .await
-                .expect("Weather API Response could not be parsed."),
-        )),
-        Err(_err) => Err(ErrorResponse(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Weather Request Encountered An Error".into(),
-        )),
+    tracing::info!("Queried 3rd Party Weather API");
+
+    // Check response
+    let body = match response.error_for_status() {
+        Ok(body) => body.text().await.map_err(|_| {
+            ErrorResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Weather API Response could not be parsed."),
+            )
+        })?,
+        Err(_err) => {
+            return Err(ErrorResponse(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Weather Response Encountered An Error".into(),
+            ));
+        }
+    };
+
+    // Cache it to Valkey before submitting response
+    match redis_conn.set(&cache_key, &body) {
+        Ok(_) => {
+            tracing::info!("Valkey cache for request set!.");
+        }
+        Err(e) => {
+            tracing::error!(error = ?e, "Failed to set Valkey cache for request.");
+        }
     }
+
+    Ok((StatusCode::OK, body))
 }
