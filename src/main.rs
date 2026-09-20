@@ -1,6 +1,6 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -366,6 +366,7 @@ fn validate_information(info: &mut RegistrationRequest) -> Result<(), String> {
 }
 
 async fn hash_password(password: String) -> String {
+    // As of argon2 0.6.0 (Argon2id v19), Argon2::default() generates a random salt
     let argon2 = Argon2::default(); //uses Argon2id instead of Argon2i, with default arguments and parameters
 
     // let params = Params::new(65536, 2, 1, None).unwrap(); // memory size in KB, iterations, parallelism, output length
@@ -377,18 +378,22 @@ async fn hash_password(password: String) -> String {
     // );
 
     // SaltString::generate uses a CSPRNG (rand_core::OsRng)
-    let salt = SaltString::generate(&mut OsRng);
+    // let salt = SaltString::generate(&mut OsRng);
 
     // let mut output_password: Vec<u8> = vec![0u8; 32]; // 32 bytes output for Argon2
-    let hashed_password = argon2
+    let password_hash = argon2
+        // let hashed_password = argon2
         // .hash_password_into(password.as_bytes(), &[], &mut output_password)\
-        .hash_password(password.as_bytes(), &salt)
+        // .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .unwrap();
     // output_password
     //     .iter()
     //     .map(|b| format!("{:02x}", b))
     //     .collect()
-    hashed_password.to_string()
+
+    password_hash.to_string()
+    // hashed_password.to_string()
 }
 
 // Login section
@@ -601,7 +606,7 @@ async fn get_user_id_and_hashed_password(
 ) -> Result<Option<(i64, String)>, String> {
     let row = state
         .db
-        .fetch_optional(sqlx::query(query).bind(content))
+        .fetch_optional(sqlx::query(sqlx::AssertSqlSafe(query)).bind(content))
         .await
         .map_err(|e| format!("Failed to fetch user: {}", e))?;
 

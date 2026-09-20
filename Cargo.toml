@@ -4,27 +4,44 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8.4", features = ["multipart", "macros"] }
-tokio = { version = "1.47.1", features = [ "full" ] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
-hyper = "1.7.0"
+argon2 = { version = "0.6.0", features = ["password-hash"] }
+axum = { version = "0.8.9", features = ["macros", "multipart"] }
+chrono = { version = "0.4.45", features = ["serde"] }
 dotenvy = "0.15.7"
-sqlx = { version = "0.8.6", features = [ "runtime-tokio-rustls", "postgres", "chrono", "macros" ] }
-tower_governor = "0.8.0"
-tower = { version = "0.5.2", features = [ "full" ] }
-tower-http = { version = "0.6.6", features = [ "trace", "cors", "compression-zstd", "compression-gzip", "limit", "request-id", "timeout", "metrics", "validate-request", "auth" ] }   # for TraceLayer (and CORS if you add it)
-tracing-subscriber = { version = "0.3.20", features = [ "env-filter" ] }
-tracing = "0.1.41"
-chrono = { version = "0.4.42", features = [ "serde" ] }
-argon2 = { version = "0.5.3", features = [ "password-hash" ] }
-fancy-regex = "0.16.1"
-rand_core = { version = "0.9.3", features = ["os_rng"] }
-jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
-uuid = "1.19.0"
-reqwest = { version = "0.13.5", features = ["json"] }
+fancy-regex = "0.19.2"
+hyper = "1.11.1"
+jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
+rand_core = { version = "0.10.1" }
 redis = { version = "1.7.0", features = ["tokio-rustls-comp"] }
+reqwest = { version = "0.13.5", features = ["json"] }
 rustls = "0.23.45"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sqlx = { version = "0.9.0", features = [
+  "chrono",
+  "macros",
+  "postgres",
+  "runtime-tokio",
+  "tls-rustls"
+] }
+tokio = { version = "1.53.1", features = ["full"] }
+tower = { version = "0.5.3", features = ["full"] }
+tower_governor = "0.8.0"
+tower-http = { version = "0.7.1", features = [
+  "auth",
+  "compression-gzip",
+  "compression-zstd",
+  "cors",
+  "limit",
+  "metrics",
+  "request-id",
+  "timeout",
+  "trace",
+  "validate-request"
+] }  # for TraceLayer (and CORS if you add it)
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = "1.26.1"
 
 [features]
 default = []
