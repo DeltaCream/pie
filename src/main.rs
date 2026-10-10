@@ -152,6 +152,9 @@ async fn main() {
 
 async fn build_app() -> axum::Router<AppState> {
     // Routes
+    let registration_route = Router::new().route("/register", post(register));
+    // .route("/register-json", post(register_json));
+
     let login_route = Router::new()
         .route("/login/username", post(login_by_username))
         .route("/login/email", post(login_by_email))
@@ -166,14 +169,15 @@ async fn build_app() -> axum::Router<AppState> {
         .route("/logout", post(logout))
         .route("/audit/{user_id}", get(audit_user));
 
-    let registration_route = Router::new().route("/register", post(register));
-    // .route("/register-json", post(register_json));
-    let router = Router::new()
+    let user_route = Router::new().merge(registration_route).merge(login_route);
+
+    let api_route = Router::new()
         .route("/", get(hello_world))
-        .nest("/api/user", registration_route)
-        .nest("/user", login_route)
+        .nest("/user", user_route)
         .route("/weather", post(query_weather));
     // .route("/health", todo!("/health route not yet implemented"));
+
+    let router = Router::new().nest("/api", api_route);
 
     router.into()
 }
